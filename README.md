@@ -5,7 +5,7 @@ scalar vector graphics (SVG) format.  My original intent was to
 generate diagrams showing the location of the Herschel 400 objects on
 the Sky Atlas 2000 maps, something like the following:
 
-<img src="images/h400_22.svg">
+<img src="images/h400_22.svg" width="300">
 
 After discovering Diego Hernangomez's excellent repository of
 [celestial data](https://dieghernan.github.io/celestial_data/data) in
