@@ -4,7 +4,8 @@ require 'optparse'
 require "open-uri"
 require "json"
 
-$geo_base_url = "https://raw.githubusercontent._data/main/data/"
+#$geo_base_url = "https://raw.githubusercontent._data/main/data/"
+$geo_base_url = "https://dieghernan.github.io/celestial_data/data/"
 
 # Parse the command line.
 options = {}
