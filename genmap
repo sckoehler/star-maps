@@ -3,9 +3,10 @@
 require 'optparse'
 require "open-uri"
 require "json"
+require "zlib"
 
-#$geo_base_url = "https://raw.githubusercontent._data/main/data/"
 $geo_base_url = "https://dieghernan.github.io/celestial_data/data/"
+$cb_base_url = "https://cdsarc.u-strasbg.fr/ftp/VI/49/"
 
 # Parse the command line.
 options = {}
@@ -59,6 +60,7 @@ OptionParser.new do |opts|
   end
 end.parse!
 
+# Specification for Sky Atlas 2000 maps.
 map_specs = [
   [],
   [90, 55,  6, 70, 12.5, 72,  2.9, 35], #1
@@ -99,7 +101,7 @@ else
   Scale = 700
 end
 
-Margin = 10
+Margin = 30
 
 def ha_to_rad(ra)
   ra * 2*Math::PI/24
@@ -137,6 +139,8 @@ def draw_star(x, y, mag)
   puts %Q[<circle cx="#{x}" cy="#{y}" r="#{size[(mag-0.5).floor+2]}"/>]
 end
 
+DSO_STROKE = 0.5
+
 def draw_dso(x, y, type, name, trivial)
   if not trivial.nil?
     puts %Q[<line x1="#{x}" y1="#{y-4}" x2="#{x}" y2="#{y+4}" stroke="red" stroke-width="2"/>]
@@ -145,21 +149,21 @@ def draw_dso(x, y, type, name, trivial)
   end
   case type
   when "G", "gg", "g", "s", "s0", "sd", "i", "e"
-    puts %Q[<ellipse cx="#{x}" cy="#{y}" rx="#{5}" ry="#{2.5}" fill="red" stroke="black" stroke-width="1"/>]
+    puts %Q[<ellipse cx="#{x}" cy="#{y}" rx="#{5}" ry="#{2.5}" fill="red" stroke="black" stroke-width="#{DSO_STROKE}"/>]
   when "GC", "gc"
-    puts %Q[<circle cx="#{x}" cy="#{y}" r="#{4}" fill="yellow" stroke="black" stroke-width="1"/>]
-    puts %Q[<line x1="#{x}" y1="#{y-4}" x2="#{x}" y2="#{y+4}" stroke="black" stroke-width="1"/>]
-    puts %Q[<line x1="#{x-4}" y1="#{y}" x2="#{x+4}" y2="#{y}" stroke="black" stroke-width="1"/>]
+    puts %Q[<circle cx="#{x}" cy="#{y}" r="#{4}" fill="yellow" stroke="black" stroke-width="#{DSO_STROKE}"/>]
+    puts %Q[<line x1="#{x}" y1="#{y-4}" x2="#{x}" y2="#{y+4}" stroke="black" stroke-width="#{DSO_STROKE}"/>]
+    puts %Q[<line x1="#{x-4}" y1="#{y}" x2="#{x+4}" y2="#{y}" stroke="black" stroke-width="#{DSO_STROKE}"/>]
   when "PN", "pn"
-    puts %Q[<line x1="#{x}" y1="#{y-6}" x2="#{x}" y2="#{y+6}" stroke="black" stroke-width="1"/>]
-    puts %Q[<line x1="#{x-6}" y1="#{y}" x2="#{x+6}" y2="#{y}" stroke="black" stroke-width="1"/>]
-    puts %Q[<circle cx="#{x}" cy="#{y}" r="#{4}" fill="lightgreen" stroke="black" stroke-width="1"/>]
+    puts %Q[<line x1="#{x}" y1="#{y-6}" x2="#{x}" y2="#{y+6}" stroke="black" stroke-width="#{DSO_STROKE}"/>]
+    puts %Q[<line x1="#{x-6}" y1="#{y}" x2="#{x+6}" y2="#{y}" stroke="black" stroke-width="#{DSO_STROKE}"/>]
+    puts %Q[<circle cx="#{x}" cy="#{y}" r="#{4}" fill="lightgreen" stroke="black" stroke-width="#{DSO_STROKE}"/>]
   when "OC", "oc", "pos"
-    puts %Q[<circle cx="#{x}" cy="#{y}" r="#{4}" fill="yellow" stroke="black" stroke-width="1" stroke-dasharray="1"/>]
+    puts %Q[<circle cx="#{x}" cy="#{y}" r="#{4}" fill="yellow" stroke="black" stroke-width="#{DSO_STROKE}" stroke-dasharray="1.5"/>]
   when "DN", "sfr", "rn", "snr", "bn", "en", "dn"
-    puts %Q[<rect x="#{x-4}" y="#{y-4}" width="#{8}" height="#{8}" fill="lightgreen" stroke="black" stroke-with="1"/>]
+    puts %Q[<rect x="#{x-4}" y="#{y-4}" width="#{8}" height="#{8}" fill="lightgreen" stroke="black" stroke-width="#{DSO_STROKE}"/>]
   else
-    puts %Q[<rect x="#{x-4}" y="#{y-4}" width="#{8}" height="#{8}" fill="red"/>]
+    puts %Q[<rect x="#{x-4}" y="#{y-4}" width="#{8}" height="#{8}" fill="red" stroke-width="#{DSO_STROKE}"/>]
   end
 end
 
@@ -179,7 +183,7 @@ end
 
 def draw_grid_path(pts)
   puts %Q[<polyline points="#{pts.map{|x| x.join(",")}.join(" ")}"
-          style="fill:none;stroke:lightgrey;stroke-width:0.5"/>]
+          style="fill:none;stroke:grey;stroke-width:0.5"/>]
 end
 
 def draw_mw_contour(pts, level)
@@ -195,13 +199,31 @@ end
 
 def read_json(file)
   fn = "data/#{file}"
-  if File.exist?(fn)
-    contents = File.read(fn)
-  else
+  if not File.exist?(fn)
     contents = URI.open($geo_base_url + file).read
     File.write(fn, contents)
   end
+  contents = File.read(fn)
   JSON.parse(contents)
+end
+
+def read_const_boundaries(file)
+  fn = "data/#{file}"
+  if not File.exist?(fn)
+    puts $cb_base_url + file
+    compressed_contents = URI.open($cb_base_url + file).read
+    File.write(fn, compressed_contents)
+  end
+  infile = open(fn)
+  gz = Zlib::GzipReader.new(infile)
+  data = {}
+  data.default = []
+  gz.each_line do |line|
+    ra, dec, const = line.split(" ")
+    data[const] += [[ra.to_f, dec.to_f]]
+  end
+  data
+  #puts "#{data}"
 end
 
 def in_bounds(x, y, bounds)
@@ -380,29 +402,18 @@ def expand_horizontal(line)
 end
 
 def plot_const_borders(bounds)
-  data = read_json("constellations.borders.geojson")
-  for f in data["features"]
-    name = f["properties"]["name"]
-    lines = f["geometry"]["coordinates"]
-    for line in lines
-      fixed_line = expand_horizontal(line)
-      #puts "#{line}"
-      #puts "#{fixed_line}"
-      #puts
-      xyline = fixed_line.map{|x| albers(deg_to_rad(x[0]), deg_to_rad(x[1]), Phi1, Phi2, Ra0, Dec0)}
-      # Draw any line that has a point in bounds.
-      draw_border_path(xyline) if xyline.map{|x| in_bounds(x[0], x[1], bounds)}.any?
-      #xyline = line.map{|x| albers(deg_to_rad(x[0]), deg_to_rad(x[1]), Phi1, Phi2, Ra0, Dec0)}
-      # Draw any line that has a point in bounds.
-      #draw_border_path(xyline) if xyline.map{|x| in_bounds(x[0], x[1], bounds)}.any?
-    end
+  data = read_const_boundaries("bound_20.dat.gz")
+  for const, points in data
+    points.append(points[0])
+    xyline = points.map{|x| albers(ha_to_rad(x[0]), deg_to_rad(x[1]), Phi1, Phi2, Ra0, Dec0)}
+    # Draw any line that has a point in bounds.
+    draw_border_path(xyline) if xyline.map{|x| in_bounds(x[0], x[1], bounds)}.any?
   end
-  exit
 end
 
 def draw_mw_contour(pts, level)
   puts %Q[<polyline points="#{pts.map{|x| x.join(",")}.join(" ")}"
-          style="fill:hsl(195,100%,#{100-5*level}%)"/>]
+          style="fill:hsl(186,100%,#{100-5*level}%)"/>]
 end
 
 def rotate_poly(a, ra0)
@@ -467,22 +478,12 @@ def plot_mw(bounds, ra0)
 end
 
 def plot_h400(bounds, trivial)
-  is_h400 = {}
-  File.open("../h400/h400.csv").each do |line|
+  # H400 objects are generated from a special list, rather than the dso list.
+  File.open("data/h400.csv").each do |line|
     x, ngc, type, const, mag, size, coord, desc = line.split(",")
-    is_h400["NGC #{ngc}"] = true
-  end
-  data = read_json("dsos.14.geojson")
-  for f in data["features"]
-    id = f["properties"]["id"]
-    next if not is_h400[id]
-    type = f["properties"]["type"]
-    mag = f["properties"]["mag"]
-    coord = f["geometry"]["coordinates"]
-    ra = deg_to_rad(coord[0])
-    dec = deg_to_rad(coord[1])
-    x, y = albers(ra, dec, Phi1, Phi2, Ra0, Dec0)
-    draw_dso(x, y, type, id, trivial) if in_bounds(x, y, bounds)
+    ra, dec = parse_coord(coord)
+    x, y = albers(ha_to_rad(ra), deg_to_rad(dec), Phi1, Phi2, Ra0, Dec0)
+    draw_dso(x, y, type, ngc, trivial) if in_bounds(x, y, bounds)
   end
 end
 
@@ -491,12 +492,12 @@ bounds = [xmin, xmax, ymin, ymax]
 plot_mw(bounds, Ra0_ha*360/24) if options[:milkyway]
 plot_grid(bounds) if options[:grid]
 plot_stars(bounds, options[:stars]) if not options[:stars].nil?
-plot_dsos(bounds, "messier.geojson") if options[:messier]
-plot_dsos(bounds, "dsos.14.geojson", options[:dso]) if not options[:dso].nil?
-plot_h400(bounds, options[:trivial]) if options[:h400]
 plot_gc_const_lines(bounds, options[:debug]) if options[:constgc]
 plot_const_lines(bounds) if options[:const]
 plot_const_borders(bounds) if options[:border]
+plot_dsos(bounds, "messier.geojson") if options[:messier]
+plot_dsos(bounds, "dsos.bright.geojson", options[:dso]) if not options[:dso].nil?
+plot_h400(bounds, options[:trivial]) if options[:h400]
 
 puts %Q[<rect x="#{xmin}" y="#{ymin}" width="#{xmax-xmin}" height="#{ymax-ymin}" stroke="black" stroke-width="1" fill="none"/>]
 
