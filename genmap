@@ -1,80 +1,47 @@
 #! /usr/bin/ruby
 
+# genmap makes simple star maps in SVG format, suitable for embedding in
+# a web page or converting to PDF or some graphics file format.  The original
+# intent was to copy the Sky Atlas 2000 maps with custom content, such as
+# displaying just the Herschel 400 objects.  However, it can also be used
+# to generate completely custom maps.
+#
+# This software is free to use for any purpose.  See the LICENSE file on
+# Github for details.
+
 require 'optparse'
 require "open-uri"
 require "json"
 require "zlib"
 
+# URLs of data sources
 $geo_base_url = "https://dieghernan.github.io/celestial_data/data/"
 $cb_base_url = "https://cdsarc.u-strasbg.fr/ftp/VI/49/"
 
-# Parse the command line.
-options = {}
-OptionParser.new do |opts|
-  opts.banner = "Usage: test.rb [options]"
-
-  opts.on("-a", "--scale FACTOR", Integer, "Scale factor") do |v|
-    options[:scale] = v
-  end
-  opts.on("-m", "--map NUM", Integer, "Sky Atlas 2000 map number") do |v|
-    options[:map] = v
-  end
-  opts.on("-u", "--ul COORD ", String, "Upper-left coordinate") do |v|
-    options[:ul] = v
-  end
-  opts.on("-l", "--lr DDDD.D+DDDD", String, "Lower-right coordinate") do |v|
-    options[:lr] = v
-  end
-  opts.on("-s", "--stars MAG", Float, "Plot stars") do |v|
-    options[:stars] = v
-  end
-  opts.on("-g", "--grid", "Plot grid") do |v|
-    options[:grid] = v
-  end
-  opts.on("-H", "--herschel", "Plot Herschel 400 objects") do |v|
-    options[:h400] = v
-  end
-  opts.on("-t", "--trivial", "Print dsos as plus signs") do |v|
-    options[:trivial] = v
-  end
-  opts.on("-M", "--messier", "Plot Messier objects") do |v|
-    options[:messier] = v
-  end
-  opts.on("-D", "--dso MAG", Float, "Plot deep sky objects") do |v|
-    options[:dso] = v
-  end
-  opts.on("-c", "--const", "Plot constellation lines") do |v|
-    options[:const] = v
-  end
-  opts.on("-C", "--constgc", "Plot great circle constellation lines") do |v|
-    options[:constgc] = v
-  end
-  opts.on("-b", "--border", "Plot constellation borders") do |v|
-    options[:border] = v
-  end
-  opts.on("-w", "--milkyway", "Plot milky way contours") do |v|
-    options[:milkyway] = v
-  end
-  opts.on("-x", "--debug", "Print debug information") do |v|
-    options[:debug] = v
-  end
-end.parse!
-
-# Specification for Sky Atlas 2000 maps.
+# Specification for Sky Atlas 2000 maps.  The parameters are:
+#
+#   Phi1 - northern standard parallel
+#   Phi2 - southern standard parallel
+#   Ra0  - map center right ascension
+#   Dec0 - map center declination
+#   Ra1  - map UL right ascension
+#   Dec1 - map UL declination
+#   Ra2  - map LR right ascension
+#   Dec2 - map LR declination
 map_specs = [
   [],
-  [90, 55,  6, 70, 12.5, 72,  2.9, 35], #1
+  [90, 55,  6, 70, 12.5, 72,  2.9, 35], #1 north polar maps
   [90, 55, 14, 70, 20.3, 72, 10.9, 35],
   [90, 55, 22, 70, 28.5, 72, 18.9, 35],
 
-  [47, 25,  2, 38,  5.1, 50,  0.1, 13], #4
+  [47, 25,  2, 38,  5.1, 50,  0.1, 13], #4 north mid-latitude maps
   [47, 25,  6, 38,  9.1, 50,  4.1, 13],
   [47, 25, 10, 38, 13.1, 50,  8.1, 13],
   [47, 25, 14, 38, 17.1, 50, 12.1, 13],
   [47, 25, 18, 38, 21.1, 50, 16.1, 13],
   [47, 25, 22, 38, 25.1, 50, 20.1, 13],
 
-  [14, -14,  2, 0,  4, 20,  0, -20], #10 fixme: 13
+  [14, -14,  2, 0,  4, 20,  0, -20], #10 equatorial maps
   [14, -14,  5, 0,  7, 20,  3, -20],
   [14, -14,  8, 0, 10, 20,  6, -20],
   [14, -14, 11, 0, 13, 20,  9, -20],
@@ -83,35 +50,48 @@ map_specs = [
   [14, -14, 20, 0, 22, 20, 18, -20],
   [14, -14, 23, 0, 25, 20, 21, -20],
 
-  [-47, -25,  2, -38,  3.9, -13, -1.1, -50], #18
+  [-47, -25,  2, -38,  3.9, -13, -1.1, -50], #18 south mid-latitude maps
   [-47, -25,  6, -38,  7.9, -13,  2.9, -50],
   [-47, -25, 10, -38, 11.9, -13,  6.9, -50],
   [-47, -25, 14, -38, 15.9, -13, 10.9, -50],
   [-47, -25, 18, -38, 19.9, -13, 14.9, -50],
   [-47, -25, 22, -38, 23.9, -13, 18.9, -50],
 
-  [-90, -55,  2, -70,  5.1, -35, -3.5, -72], #24
+  [-90, -55,  2, -70,  5.1, -35, -3.5, -72], #24 south polar maps
   [-90, -55, 10, -70, 13.1, -35,  4.5, -72],
   [-90, -55, 18, -70, 21.1, -35, 12.5, -72],
 ]
 
-if options[:scale]
-  Scale = options[:scale]
-else
-  Scale = 700
+DSO_STROKE = 0.5
+
+###########################################################################
+# Utility functions
+###########################################################################
+
+def g(x)
+  # Convert a floating point number to a string, limiting the digits.
+  "%.2f" % x
 end
 
-Margin = 30
+def f(x)
+  # Convert a floating point number to a quoted string.
+  %Q["#{g(x)}"]
+end
 
 def ha_to_rad(ra)
+  # Convert hour-angle to radians.
   ra * 2*Math::PI/24
 end
 
 def deg_to_rad(dec)
+  # Convert degrees to radians.
   dec * Math::PI/180
 end
 
-def albers(ra, dec, phi1, phi2, ra0, dec0)
+def project(ra, dec, phi1, phi2, ra0, dec0)
+  # Project ra, dec onto a flat map using standard parallels phi1 and phi2
+  # and centered on ra0, dec0.  All parameters are in radians.
+
   # Normalize the cone/cylinder opposite ra0
   ra += 2*Math::PI if ra0-ra > Math::PI
   ra -= 2*Math::PI if ra-ra0 > Math::PI
@@ -133,71 +113,16 @@ def albers(ra, dec, phi1, phi2, ra0, dec0)
   return Scale*x, -Scale*y
 end
 
-def draw_star(x, y, mag)
-  size = 0.upto(10).map{|x| 10*0.70**x}
-  #size = [10, 8, 6, 3.96, 2.61, 1.72, 1.13, 0.75]
-  puts %Q[<circle cx="#{x}" cy="#{y}" r="#{size[(mag-0.5).floor+2]}"/>]
-end
-
-DSO_STROKE = 0.5
-
-def draw_dso(x, y, type, name, trivial)
-  if not trivial.nil?
-    puts %Q[<line x1="#{x}" y1="#{y-4}" x2="#{x}" y2="#{y+4}" stroke="red" stroke-width="2"/>]
-    puts %Q[<line x1="#{x-4}" y1="#{y}" x2="#{x+4}" y2="#{y}" stroke="red" stroke-width="2"/>]
-    return
-  end
-  case type
-  when "G", "gg", "g", "s", "s0", "sd", "i", "e"
-    puts %Q[<ellipse cx="#{x}" cy="#{y}" rx="#{5}" ry="#{2.5}" fill="red" stroke="black" stroke-width="#{DSO_STROKE}"/>]
-  when "GC", "gc"
-    puts %Q[<circle cx="#{x}" cy="#{y}" r="#{4}" fill="yellow" stroke="black" stroke-width="#{DSO_STROKE}"/>]
-    puts %Q[<line x1="#{x}" y1="#{y-4}" x2="#{x}" y2="#{y+4}" stroke="black" stroke-width="#{DSO_STROKE}"/>]
-    puts %Q[<line x1="#{x-4}" y1="#{y}" x2="#{x+4}" y2="#{y}" stroke="black" stroke-width="#{DSO_STROKE}"/>]
-  when "PN", "pn"
-    puts %Q[<line x1="#{x}" y1="#{y-6}" x2="#{x}" y2="#{y+6}" stroke="black" stroke-width="#{DSO_STROKE}"/>]
-    puts %Q[<line x1="#{x-6}" y1="#{y}" x2="#{x+6}" y2="#{y}" stroke="black" stroke-width="#{DSO_STROKE}"/>]
-    puts %Q[<circle cx="#{x}" cy="#{y}" r="#{4}" fill="lightgreen" stroke="black" stroke-width="#{DSO_STROKE}"/>]
-  when "OC", "oc", "pos"
-    puts %Q[<circle cx="#{x}" cy="#{y}" r="#{4}" fill="yellow" stroke="black" stroke-width="#{DSO_STROKE}" stroke-dasharray="1.5"/>]
-  when "DN", "sfr", "rn", "snr", "bn", "en", "dn"
-    puts %Q[<rect x="#{x-4}" y="#{y-4}" width="#{8}" height="#{8}" fill="lightgreen" stroke="black" stroke-width="#{DSO_STROKE}"/>]
-  else
-    puts %Q[<rect x="#{x-4}" y="#{y-4}" width="#{8}" height="#{8}" fill="red" stroke-width="#{DSO_STROKE}"/>]
-  end
-end
-
-def draw_const_path(pts)
-  puts %Q[<polyline points="#{pts.map{|x| x.join(",")}.join(" ")}"
-          style="fill:none;stroke:black;stroke-width:0.5"/>]
-end
-
-def draw_border_path(pts)
-  puts %Q[<polyline points="#{pts.map{|x| x.join(",")}.join(" ")}"
-          style="fill:none;stroke:grey;stroke-width:0.5;stroke-dasharray:3"/>]
-end
-
-def draw_const_border_line(x1, y1, x2, y2)
-  puts %Q[<line x1="#{x1}" y1="#{y1}" x2="#{x2}" y2="#{y2}" stroke-width="0.5" stroke="gray" stroke-dasharray="3"/>]
-end
-
-def draw_grid_path(pts)
-  puts %Q[<polyline points="#{pts.map{|x| x.join(",")}.join(" ")}"
-          style="fill:none;stroke:grey;stroke-width:0.5"/>]
-end
-
-def draw_mw_contour(pts, level)
-  puts %Q[<polyline points="#{pts.map{|x| x.join(",")}.join(" ")}"
-          style="fill:lightblue;fill-opacity:#{level*0.3}"/>]
-end
-
 def parse_coord(coord)
+  # Parse a string in the format DDDD.D+DDDD into [ra, dec] in radians.
   ra = coord[0..1].to_i + coord[2..5].to_f/60
   dec = (coord[6] == "+" ? 1 : -1) * (coord[7..8].to_i + coord[9..10].to_i/60.0)
-  [ra, dec]
+  [ha_to_rad(ra), deg_to_rad(dec)]
 end
 
 def read_json(file)
+  # Download and cache a geojson data file from $geo_base_url and parse
+  # into Ruby format.
   fn = "data/#{file}"
   if not File.exist?(fn)
     contents = URI.open($geo_base_url + file).read
@@ -208,6 +133,8 @@ def read_json(file)
 end
 
 def read_const_boundaries(file)
+  # Download and cache a constellation boundary file from $cb_base_url
+  # and parse it into a hash of boundary segments by constellation.
   fn = "data/#{file}"
   if not File.exist?(fn)
     puts $cb_base_url + file
@@ -223,200 +150,18 @@ def read_const_boundaries(file)
     data[const] += [[ra.to_f, dec.to_f]]
   end
   data
-  #puts "#{data}"
 end
 
 def in_bounds(x, y, bounds)
-  x >= bounds[0] and x <= bounds[1] and y >= bounds[2] and y <= bounds[3]
-end
-
-if options[:map]
-  Phi1 = deg_to_rad(map_specs[options[:map]][0])
-  Phi2 = deg_to_rad(map_specs[options[:map]][1])
-  Ra0_ha = map_specs[options[:map]][2]
-  Ra0 = ha_to_rad(Ra0_ha)
-  Dec0 = deg_to_rad(map_specs[options[:map]][3])
-  Ra1 = ha_to_rad(map_specs[options[:map]][4])
-  Dec1 = deg_to_rad(map_specs[options[:map]][5])
-  Ra2 = ha_to_rad(map_specs[options[:map]][6])
-  Dec2 = deg_to_rad(map_specs[options[:map]][7])
-else
-  ra1, dec1 = parse_coord(options[:ul])
-  Ra1 = ha_to_rad(ra1)
-  Dec1 = deg_to_rad(dec1)
-  ra2, dec2 = parse_coord(options[:lr])
-  Ra2 = ha_to_rad(ra2)
-  Dec2 = deg_to_rad(dec2)
-
-  Phi1 = Dec2 + 0.7*(Dec1-Dec2)
-  Phi2 = Dec2 + 0.3*(Dec1-Dec2)
-
-  Ra0 = (Ra1+Ra2)/2
-  Ra0_ha = (ra1+ra2)/2
-  Dec0 = (Dec1+Dec2)/2
-end
-
-xmin, ymin = albers(Ra1, Dec1, Phi1, Phi2, Ra0, Dec0)
-xmax, ymax = albers(Ra2, Dec2, Phi1, Phi2, Ra0, Dec0)
-
-# Print the header material
-#puts %Q[<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2500 -2500 5000 5000">]
-puts %Q[<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 #{xmax-xmin+2*Margin} #{ymax-ymin+2*Margin}">]
-puts "<g transform=\"translate(#{-xmin+Margin}, #{-ymin+Margin})\">"
-puts %Q[<clipPath id="CP">]
-puts %Q[<rect x="#{xmin}" y="#{ymin}" width="#{xmax-xmin}" height="#{ymax-ymin}" stroke="black" stroke-width="1" fill="white"/>]
-puts %Q[</clipPath>]
-puts %Q[<g clip-path="url(#CP)">]
-puts %Q[<rect x="#{xmin}" y="#{ymin}" width="#{xmax-xmin}" height="#{ymax-ymin}" stroke="black" stroke-width="1" fill="white"/>]
-
-def plot_grid(bounds)
-  # Print grid lines
-  for dec in (-80).step(80, 10)
-    line = (Ra0_ha.floor-12).step(Ra0_ha+12, 0.2).map{|ra| [ra, dec]}
-    xyline = line.map{|x| albers(ha_to_rad(x[0]), deg_to_rad(x[1]), Phi1, Phi2, Ra0, Dec0)}
-    # Draw any line that has a point in bounds.
-    draw_grid_path(xyline) if xyline.map{|x| in_bounds(x[0], x[1], bounds)}
-  end
-
-  for ra in (Ra0_ha.floor-12).upto(Ra0_ha+12)
-    bound = ra.even? ? 85 : 80
-    line = (-bound).step(bound, 2).map{|dec| [ra, dec]}
-    xyline = line.map{|x| albers(ha_to_rad(x[0]), deg_to_rad(x[1]), Phi1, Phi2, Ra0, Dec0)}
-    # Draw any line that has a point in bounds.
-    draw_grid_path(xyline) if xyline.map{|x| in_bounds(x[0], x[1], bounds)}
-  end
-end
-
-def plot_dsos(bounds, file, mag_limit=12)
-  data = read_json(file)
-  for f in data["features"]
-    name = f["properties"]["name"]
-    type = f["properties"]["type"]
-    mag = f["properties"]["mag"]
-    coord = f["geometry"]["coordinates"]
-    if mag <= mag_limit
-      ra = deg_to_rad(coord[0])
-      dec = deg_to_rad(coord[1])
-      x, y = albers(ra, dec, Phi1, Phi2, Ra0, Dec0)
-      draw_dso(x, y, type, name, nil) if in_bounds(x, y, bounds)
-    end
-  end
-end
-
-def plot_stars(bounds, mag_limit=10)
-  if mag_limit <= 6.0
-    data = read_json("stars.6.geojson")
-  elsif mag_limit <= 8.0
-    data = read_json("stars.8.geojson")
-  else
-    data = read_json("stars.14.geojson")
-  end
-  for f in data["features"]
-    name = f["properties"]["name"]
-    type = f["properties"]["type"]
-    mag = f["properties"]["mag"]
-    coord = f["geometry"]["coordinates"]
-    if mag <= mag_limit
-      ra = deg_to_rad(coord[0])
-      dec = deg_to_rad(coord[1])
-      x, y = albers(ra, dec, Phi1, Phi2, Ra0, Dec0)
-      draw_star(x, y, mag) if in_bounds(x, y, bounds)
-    end
-  end
-end
-
-def plot_const_lines(bounds)
-  data = read_json("constellations.lines.geojson")
-  for f in data["features"]
-    name = f["properties"]["name"]
-    lines = f["geometry"]["coordinates"]
-    for line in lines
-      xyline = line.map{|x| albers(deg_to_rad(x[0]), deg_to_rad(x[1]), Phi1, Phi2, Ra0, Dec0)}
-      # Draw any line that has a point in bounds.
-      draw_const_path(xyline) if xyline.map{|x| in_bounds(x[0], x[1], bounds)}.any?
-    end
-  end
-end
-
-def draw_gc_const_line(p1, p2, debug)
-  p1, p2 = p2, p1 if p1[0] > p2[0]
-  puts "#{p1} #{p2}" if debug
-  ra1, dec1 = deg_to_rad(p1[0]), deg_to_rad(p1[1])
-  ra2, dec2 = deg_to_rad(p2[0]), deg_to_rad(p2[1])
-
-  cc = ra2-ra1
-  a = Math::PI/2 - dec2
-  b = Math::PI/2 - dec1
-  puts "cc=#{cc*180/Math::PI}" if debug
-  puts "a=#{a*180/Math::PI}" if debug
-  puts "b=#{b*180/Math::PI}" if debug
-
-  # Solve for c
-  c = Math.acos(Math.cos(a)*Math.cos(b) + Math.sin(a)*Math.sin(b)*Math.cos(cc))
-  puts "c=#{c*180/Math::PI}" if debug
-
-  # Solve for A
-  aa = Math.asin(Math.sin(cc)*Math.sin(a)/Math.sin(c))
-  puts "aa=#{aa*180/Math::PI}" if debug
-  aa = Math::PI/2 - Math.atan2(Math.sin(b)/Math.tan(a)-Math.cos(b)*Math.cos(cc), Math.sin(cc))
-  puts "aa=#{aa*180/Math::PI}" if debug
-
-  x1, y1 = albers(ra1, dec1, Phi1, Phi2, Ra0, Dec0)
-  for ccx in 1.upto(10).map{|x| x*cc/10}
-    ax = Math::PI/2 - Math.atan2(Math.cos(b)*Math.cos(ccx)+Math.sin(ccx)/Math.tan(aa), Math.sin(b))
-    puts "ax=#{ax*180/Math::PI}" if debug
-    puts "ra=#{(ra1+ccx)*180/Math::PI} dec=#{(Math::PI/2-ax)*180/Math::PI}" if debug
-    x2, y2 = albers(ra1+ccx, Math::PI/2 - ax, Phi1, Phi2, Ra0, Dec0)
-    puts %Q[<line x1="#{x1}" y1="#{y1}" x2="#{x2}" y2="#{y2}" stroke-width="0.5" stroke="red"/>] unless debug
-    x1, y1 = x2, y2
-  end
-end
-
-def plot_gc_const_lines(bounds, debug)
-  data = read_json("constellations.lines.geojson")
-  for f in data["features"]
-    name = f["properties"]["name"]
-    lines = f["geometry"]["coordinates"]
-    for line in lines
-      for i in 0.upto(line.length-2)
-        x, y = albers(deg_to_rad(line[i][0]), deg_to_rad(line[i][1]), Phi1, Phi2, Ra0, Dec0)
-        x1, y1 = albers(deg_to_rad(line[i+1][0]), deg_to_rad(line[i+1][1]), Phi1, Phi2, Ra0, Dec0)
-        # Draw any line that has a point in bounds.
-        draw_gc_const_line(line[i], line[i+1], debug) if in_bounds(x, y, bounds) or in_bounds(x1, y1, bounds)
-      end
-    end
-  end
-end
-
-def expand_horizontal(line)
-  fixed_line = line.dup
-  for i in (line.length-2).downto(0)
-    u, v = line[i], line[i+1]
-    if (u[1]-v[1]).abs < 0.2
-      #puts "%% #{u} #{v}"
-      1.upto(5).each{|x| fixed_line.insert(i+1, [u[0]+x*(v[0]-u[0])/6, u[1]+(v[1]-u[1])/6])}
-      #puts "%% inserting #{line[i..(i+6)]}"
-    end
-  end
-  return fixed_line
-end
-
-def plot_const_borders(bounds)
-  data = read_const_boundaries("bound_20.dat.gz")
-  for const, points in data
-    points.append(points[0])
-    xyline = points.map{|x| albers(ha_to_rad(x[0]), deg_to_rad(x[1]), Phi1, Phi2, Ra0, Dec0)}
-    # Draw any line that has a point in bounds.
-    draw_border_path(xyline) if xyline.map{|x| in_bounds(x[0], x[1], bounds)}.any?
-  end
-end
-
-def draw_mw_contour(pts, level)
-  puts %Q[<polyline points="#{pts.map{|x| x.join(",")}.join(" ")}"
-          style="fill:hsl(186,100%,#{100-5*level}%)"/>]
+  # Return true if x, y is within the map boundary bounds.
+  xmin, xmax, ymin, ymax = bounds
+  x >= xmin and x <= xmax and y >= ymin and y <= ymax
 end
 
 def rotate_poly(a, ra0)
+  # Any polygon that crosses hour-angle 0 is split there.  This function
+  # changes the split to a different hour-angle (ra0). If this were not
+  # done, Milky Way brighness contours would not display correctly.
 
   return a if ra0 == 0
 
@@ -454,12 +199,161 @@ def rotate_poly(a, ra0)
     break if (a[x][0] < s and a[x+1][0] > s) or (a[x][0] > s and a[x+1][0] < s)
   end
 
-  #puts "%% (#{u} #{v}) #{r} (#{w} #{x})"
-
   a[(v+1)..r] + a[0..u] + a[(x+1)..(a.length-1)] + a[(r+1)..w] + a[(v+1)..(v+1)]
 end
 
+###########################################################################
+# Draw individual map elements
+###########################################################################
+
+def draw_star(x, y, mag)
+  # Draw a star with size related to magnitude.
+  size = 0.upto(10).map{|x| 10*0.70**x}
+  puts %Q[<circle cx=#{f(x)} cy=#{f(y)} r=#{f(size[(mag-0.5).floor+2])}/>]
+end
+
+def draw_dso(x, y, type, name, plus)
+  # Draw DSOs using symbols similar to that used in Sky Atlas 2000.
+
+  if not plus.nil?
+    # Draw DSOs as red plus signs.
+    puts %Q[<line x1=#{f(x)} y1=#{f(y-4)} x2=#{f(x)} y2=#{f(y+4)} stroke="red" stroke-width="2"/>]
+    puts %Q[<line x1=#{f(x-4)} y1=#{f(y)} x2=#{f(x+4)} y2=#{f(y)} stroke="red" stroke-width="2"/>]
+  else
+    case type
+    when "G", "gg", "g", "s", "s0", "sd", "i", "e"
+      puts %Q[<ellipse cx=#{f(x)} cy=#{f(y)} rx="5" ry="2.5" fill="red" stroke="black" stroke-width="#{DSO_STROKE}"/>]
+    when "GC", "gc"
+      puts %Q[<circle cx=#{f(x)} cy=#{f(y)} r="4" fill="yellow" stroke="black" stroke-width="#{DSO_STROKE}"/>]
+      puts %Q[<line x1=#{f(x)} y1=#{f(y-4)} x2=#{f(x)} y2=#{f(y+4)} stroke="black" stroke-width="#{DSO_STROKE}"/>]
+      puts %Q[<line x1=#{f(x-4)} y1=#{f(y)} x2=#{f(x+4)} y2=#{f(y)} stroke="black" stroke-width="#{DSO_STROKE}"/>]
+    when "PN", "pn"
+      puts %Q[<line x1=#{f(x)} y1=#{f(y-6)} x2=#{f(x)} y2=#{f(y+6)} stroke="black" stroke-width="#{DSO_STROKE}"/>]
+      puts %Q[<line x1=#{f(x-6)} y1=#{f(y)} x2=#{f(x+6)} y2=#{f(y)} stroke="black" stroke-width="#{DSO_STROKE}"/>]
+      puts %Q[<circle cx=#{f(x)} cy=#{f(y)} r="4" fill="lightgreen" stroke="black" stroke-width="#{DSO_STROKE}"/>]
+    when "OC", "oc", "pos"
+      puts %Q[<circle cx=#{f(x)} cy=#{f(y)} r="4" fill="yellow" stroke="black" stroke-width="#{DSO_STROKE}" stroke-dasharray="1.5"/>]
+    when "DN", "sfr", "rn", "snr", "bn", "en", "dn"
+      puts %Q[<rect x=#{f(x-4)} y=#{f(y-4)} width="8" height="8" fill="lightgreen" stroke="black" stroke-width="#{DSO_STROKE}"/>]
+    else
+      puts %Q[<rect x=#{f(x-4)} y=#{f(y-4)} width="8" height="8" fill="red" stroke-width="#{DSO_STROKE}"/>]
+    end
+  end
+end
+
+def draw_const_path(pts)
+  # Draw a constellation line path.
+  puts %Q[<polyline points="#{pts.map{|x| x.map{|y| g(y)}.join(",")}.join(" ")}"
+          style="fill:none;stroke:black;stroke-width:0.5"/>]
+end
+
+def draw_border_path(pts)
+  # Draw a constellation border path.
+  puts %Q[<polyline points="#{pts.map{|x| x.map{|y| g(y)}.join(",")}.join(" ")}"
+          style="fill:none;stroke:grey;stroke-width:0.5;stroke-dasharray:3"/>]
+end
+
+def draw_grid_path(pts)
+  # Draw a coordinate grid path.
+  puts %Q[<polyline points="#{pts.map{|x| x.map{|y| g(y)}.join(",")}.join(" ")}"
+          style="fill:none;stroke:grey;stroke-width:0.5"/>]
+end
+
+def draw_mw_contour(pts, level)
+  # Draw a filled Milky Way brighess polygon.
+  puts %Q[<polyline points="#{pts.map{|x| x.map{|y| g(y)}.join(",")}.join(" ")}"
+          style="fill:hsl(186,100%,#{100-5*level}%)"/>]
+end
+
+###########################################################################
+# Draw a complete map layer
+###########################################################################
+
+def plot_grid(bounds)
+  # Plot coordinate grid lines
+  for dec in (-80).step(80, 10)
+    line = (Ra0_ha.floor-12).step(Ra0_ha+12, 0.2).map{|ra| [ra, dec]}
+    xyline = line.map{|x| project(ha_to_rad(x[0]), deg_to_rad(x[1]), Phi1, Phi2, Ra0, Dec0)}
+    # Draw any line that has a point in bounds.
+    draw_grid_path(xyline) if xyline.map{|x| in_bounds(x[0], x[1], bounds)}
+  end
+
+  for ra in (Ra0_ha.floor-12).upto(Ra0_ha+12)
+    bound = ra.even? ? 85 : 80
+    line = (-bound).step(bound, 2).map{|dec| [ra, dec]}
+    xyline = line.map{|x| project(ha_to_rad(x[0]), deg_to_rad(x[1]), Phi1, Phi2, Ra0, Dec0)}
+    # Draw any line that has a point in bounds.
+    draw_grid_path(xyline) if xyline.map{|x| in_bounds(x[0], x[1], bounds)}
+  end
+end
+
+def plot_dsos(bounds, file, mag_limit=12)
+  # Plot DSOs to the specified magnitude limit.
+  data = read_json(file)
+  for f in data["features"]
+    name = f["properties"]["name"]
+    type = f["properties"]["type"]
+    mag = f["properties"]["mag"]
+    coord = f["geometry"]["coordinates"]
+    if mag <= mag_limit
+      ra = deg_to_rad(coord[0])
+      dec = deg_to_rad(coord[1])
+      x, y = project(ra, dec, Phi1, Phi2, Ra0, Dec0)
+      draw_dso(x, y, type, name, nil) if in_bounds(x, y, bounds)
+    end
+  end
+end
+
+def plot_stars(bounds, mag_limit=10)
+  # Plot stars to the specified magnitude limit.
+  if mag_limit <= 6.0
+    data = read_json("stars.6.geojson")
+  elsif mag_limit <= 8.0
+    data = read_json("stars.8.geojson")
+  else
+    data = read_json("stars.14.geojson")
+  end
+  for f in data["features"]
+    name = f["properties"]["name"]
+    type = f["properties"]["type"]
+    mag = f["properties"]["mag"]
+    coord = f["geometry"]["coordinates"]
+    if mag <= mag_limit
+      ra = deg_to_rad(coord[0])
+      dec = deg_to_rad(coord[1])
+      x, y = project(ra, dec, Phi1, Phi2, Ra0, Dec0)
+      draw_star(x, y, mag) if in_bounds(x, y, bounds)
+    end
+  end
+end
+
+def plot_const_lines(bounds)
+  # Plot constellation lines.
+  data = read_json("constellations.lines.geojson")
+  for f in data["features"]
+    name = f["properties"]["name"]
+    lines = f["geometry"]["coordinates"]
+    for line in lines
+      xyline = line.map{|x| project(deg_to_rad(x[0]), deg_to_rad(x[1]), Phi1, Phi2, Ra0, Dec0)}
+      # Draw any line that has a point in bounds.
+      draw_const_path(xyline) if xyline.map{|x| in_bounds(x[0], x[1], bounds)}.any?
+    end
+  end
+end
+
+def plot_const_borders(bounds)
+  # Plot constellation borders.
+  data = read_const_boundaries("bound_20.dat.gz")
+  for const, points in data
+    points.append(points[0])
+    xyline = points.map{|x| project(ha_to_rad(x[0]), deg_to_rad(x[1]), Phi1, Phi2, Ra0, Dec0)}
+    # Draw any line that has a point in bounds.
+    draw_border_path(xyline) if xyline.map{|x| in_bounds(x[0], x[1], bounds)}.any?
+  end
+end
+
 def plot_mw(bounds, ra0)
+  # Plot Milky Way brightness regions.
   data = read_json("mw.geojson")
   for f in data["features"]
     level = f["properties"]["id"][2].to_i
@@ -469,7 +363,7 @@ def plot_mw(bounds, ra0)
       rawline = []
       for line in patch
         rot_line = rotate_poly(line, ra0)
-        xyline = rot_line.map{|x| albers(deg_to_rad(x[0]), deg_to_rad(x[1]), Phi1, Phi2, Ra0, Dec0)}
+        xyline = rot_line.map{|x| project(deg_to_rad(x[0]), deg_to_rad(x[1]), Phi1, Phi2, Ra0, Dec0)}
         draw_mw_contour(xyline, level+offset) if  xyline.map{|x| in_bounds(x[0], x[1], bounds)}.any?
         offset = -1
       end
@@ -477,35 +371,140 @@ def plot_mw(bounds, ra0)
   end
 end
 
-def plot_h400(bounds, trivial)
-  # H400 objects are generated from a special list, rather than the dso list.
+def plot_h400(bounds, plus)
+  # Plot Herschel 400 objects. The H400 objects are generated from a special
+  # list, rather than the dso list.
   File.open("data/h400.csv").each do |line|
     x, ngc, type, const, mag, size, coord, desc = line.split(",")
     ra, dec = parse_coord(coord)
-    x, y = albers(ha_to_rad(ra), deg_to_rad(dec), Phi1, Phi2, Ra0, Dec0)
-    draw_dso(x, y, type, ngc, trivial) if in_bounds(x, y, bounds)
+    x, y = project(ra, dec, Phi1, Phi2, Ra0, Dec0)
+    draw_dso(x, y, type, ngc, plus) if in_bounds(x, y, bounds)
   end
 end
 
+def plot_border(bounds)
+  # Print the map border.
+  xmin, xmax, ymin, ymax = bounds
+  puts %Q[<rect x=#{f(xmin)} y=#{f(ymin)} width=#{f(xmax-xmin)} height=#{f(ymax-ymin)} stroke="black" stroke-width="1" fill="none"/>]
+end
+
+def plot_map_number(bounds, map_number)
+  xmin, xmax, ymin, ymax = bounds
+  puts %Q[<text x=#{f(xmin+20)} y=#{f(ymin+30)} font-size="20" fill="black">#{map_number}</text>]
+end
+
+###########################################################################
+# Main program
+###########################################################################
+
+# Parse the command line.
+options = {}
+OptionParser.new do |opts|
+  opts.banner = "Usage: test.rb [options]"
+
+  opts.on("-a", "--scale FACTOR", Integer, "Scale factor") do |v|
+    options[:scale] = v
+  end
+  opts.on("-r", "--margin PIXELS", Integer, "Margin outside map") do |v|
+    options[:margin] = v
+  end
+  opts.on("-m", "--map NUM", Integer, "Sky Atlas 2000 map number") do |v|
+    options[:map] = v
+  end
+  opts.on("-u", "--ul DDDD.D+DDDD ", String, "Upper-left coordinate") do |v|
+    options[:ul] = v
+  end
+  opts.on("-l", "--lr DDDD.D+DDDD", String, "Lower-right coordinate") do |v|
+    options[:lr] = v
+  end
+  opts.on("-s", "--stars MAG", Float, "Plot stars") do |v|
+    options[:stars] = v
+  end
+  opts.on("-g", "--grid", "Plot grid") do |v|
+    options[:grid] = v
+  end
+  opts.on("-H", "--herschel", "Plot Herschel 400 objects") do |v|
+    options[:h400] = v
+  end
+  opts.on("-p", "--plus", "Print dsos as plus signs") do |v|
+    options[:plus] = v
+  end
+  opts.on("-M", "--messier", "Plot Messier objects") do |v|
+    options[:messier] = v
+  end
+  opts.on("-D", "--dso MAG", Float, "Plot deep sky objects") do |v|
+    options[:dso] = v
+  end
+  opts.on("-c", "--const", "Plot constellation lines") do |v|
+    options[:const] = v
+  end
+  opts.on("-b", "--border", "Plot constellation borders") do |v|
+    options[:border] = v
+  end
+  opts.on("-w", "--milkyway", "Plot milky way contours") do |v|
+    options[:milkyway] = v
+  end
+end.parse!
+
+# Fixme: we need a different solution than scale
+Scale = options[:scale] || 700
+
+Margin = options[:margin] || 0
+
+# Establish some globals to specify the map to be generated.
+if options[:map]
+  abort "The Sky Atlas 2000 map number must be between 1 and 26." if options[:map] < 1 or options[:map] > 26
+  Phi1 = deg_to_rad(map_specs[options[:map]][0])
+  Phi2 = deg_to_rad(map_specs[options[:map]][1])
+  Ra0_ha = map_specs[options[:map]][2]
+  Ra0 = ha_to_rad(Ra0_ha)
+  Dec0 = deg_to_rad(map_specs[options[:map]][3])
+  Ra1 = ha_to_rad(map_specs[options[:map]][4])
+  Dec1 = deg_to_rad(map_specs[options[:map]][5])
+  Ra2 = ha_to_rad(map_specs[options[:map]][6])
+  Dec2 = deg_to_rad(map_specs[options[:map]][7])
+else
+  abort "You must either specify a Sky Atlas 2000 map number or ul and lr coordinates." unless options[:ul] and options[:lr]
+  Ra1, Dec1 = parse_coord(options[:ul])
+  Ra2, Dec2 = parse_coord(options[:lr])
+
+  # Approximate standard parallels 30% in from the map top and bottom
+  Phi1 = Dec2 + 0.7*(Dec1-Dec2)
+  Phi2 = Dec2 + 0.3*(Dec1-Dec2)
+
+  # Approximate the map center.
+  Ra0 = (Ra1+Ra2)/2
+  Ra0_ha = (ra1+ra2)/2
+  Dec0 = (Dec1+Dec2)/2
+end
+
+# Determine the coordinates of the map boundary.
+xmin, ymin = project(Ra1, Dec1, Phi1, Phi2, Ra0, Dec0)
+xmax, ymax = project(Ra2, Dec2, Phi1, Phi2, Ra0, Dec0)
 bounds = [xmin, xmax, ymin, ymax]
 
+# Print the header material.
+puts %Q[<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 #{g(xmax-xmin+2*Margin)} #{g(ymax-ymin+2*Margin)}">]
+puts %Q[<g transform="translate(#{g(-xmin+Margin)}, #{g(-ymin+Margin)})">]
+puts %Q[<clipPath id="CP">]
+puts %Q[<rect x=#{f(xmin)} y=#{f(ymin)} width=#{f(xmax-xmin)} height=#{f(ymax-ymin)} stroke="black" stroke-width="1" fill="white"/>]
+puts %Q[</clipPath>]
+puts %Q[<g clip-path="url(#CP)">]
+puts %Q[<rect x=#{f(xmin)} y=#{f(ymin)} width=#{f(xmax-xmin)} height=#{f(ymax-ymin)} fill="white"/>]
+
+# Print the various map layers.
 plot_mw(bounds, Ra0_ha*360/24) if options[:milkyway]
 plot_grid(bounds) if options[:grid]
 plot_stars(bounds, options[:stars]) if not options[:stars].nil?
-plot_gc_const_lines(bounds, options[:debug]) if options[:constgc]
 plot_const_lines(bounds) if options[:const]
 plot_const_borders(bounds) if options[:border]
 plot_dsos(bounds, "messier.geojson") if options[:messier]
-plot_dsos(bounds, "dsos.bright.geojson", options[:dso]) if not options[:dso].nil?
-plot_h400(bounds, options[:trivial]) if options[:h400]
+plot_dsos(bounds, "dsos.14.geojson", options[:dso]) if not options[:dso].nil?
+plot_h400(bounds, options[:plus]) if options[:h400]
+plot_map_number(bounds, options[:map]) if options[:map]
+plot_border(bounds)
 
-puts %Q[<rect x="#{xmin}" y="#{ymin}" width="#{xmax-xmin}" height="#{ymax-ymin}" stroke="black" stroke-width="1" fill="none"/>]
-
-if options[:map]
-  puts %Q[<text x="#{xmin+20}" y="#{ymin+30}" font-size="20" fill="black">#{options[:map]}</text>]
-end
-
-# Print trailer
-puts '</g>'
-puts '</g>'
-puts '</svg>'
+# Print the trailer.
+puts %Q[</g>]
+puts %Q[</g>]
+puts %Q[</svg>]
