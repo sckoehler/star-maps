@@ -409,27 +409,24 @@ end
 # Parse the command line.
 options = {}
 OptionParser.new do |opts|
-  opts.banner = "Usage: test.rb [options]"
+  opts.banner = "Usage: genmap [options]"
 
-  opts.on("-w", "--width ", String, "Width of image") do |v|
+  opts.on("-w", "--width SPEC", String, "Width of image, e.g. 6in") do |v|
     options[:width] = v
-  end
-  opts.on("-r", "--margin PIXELS", Integer, "Margin outside map") do |v|
-    options[:margin] = v
   end
   opts.on("-m", "--map NUM", Integer, "Sky Atlas 2000 map number") do |v|
     options[:map] = v
   end
-  opts.on("-u", "--ul DDDD.D+DDDD ", String, "Upper-left coordinate") do |v|
+  opts.on("-u", "--ul DDDD.D+DDDD ", String, "Upper-left map coordinate") do |v|
     options[:ul] = v
   end
-  opts.on("-l", "--lr DDDD.D+DDDD", String, "Lower-right coordinate") do |v|
+  opts.on("-l", "--lr DDDD.D+DDDD", String, "Lower-right map coordinate") do |v|
     options[:lr] = v
   end
   opts.on("-S", "--stars MAG", Float, "Plot stars") do |v|
     options[:stars] = v
   end
-  opts.on("-g", "--grid", "Plot grid") do |v|
+  opts.on("-G", "--grid", "Plot grid") do |v|
     options[:grid] = v
   end
   opts.on("-H", "--herschel", "Plot Herschel 400 objects") do |v|
@@ -456,7 +453,6 @@ OptionParser.new do |opts|
 end.parse!
 
 Width = options[:width] || "6in"
-Margin = options[:margin] || 0
 
 # Establish some globals to specify the map to be generated.
 if options[:map]
@@ -496,8 +492,8 @@ amt, units = parse_width(Width)
 Height = (amt*(ymax-ymin)/(xmax-xmin)).to_s + units
 
 # Print the header material.
-puts %Q[<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 #{g(xmax-xmin+2*Margin)} #{g(ymax-ymin+2*Margin)}" width="#{Width}" height="#{Height}">]
-puts %Q[<g transform="translate(#{g(-xmin+Margin)}, #{g(-ymin+Margin)})">]
+puts %Q[<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 #{g(xmax-xmin)} #{g(ymax-ymin)}" width="#{Width}" height="#{Height}">]
+puts %Q[<g transform="translate(#{g(-xmin)}, #{g(-ymin)})">]
 puts %Q[<clipPath id="CP">]
 puts %Q[<rect x=#{f(xmin)} y=#{f(ymin)} width=#{f(xmax-xmin)} height=#{f(ymax-ymin)} stroke="black" stroke-width="1" fill="white"/>]
 puts %Q[</clipPath>]
