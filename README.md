@@ -14,6 +14,14 @@ layers.  The end result looks like this:
 
 <img src="images/map9.svg">
 
+## Installation
+
+After you download the source files for star-maps, you should be able
+to run genmaps from the top-level directory, assuming you have Ruby
+installed.  Genmaps assumes Ruby is located in /usr/bin.  If not, you
+may need to edit the top line of genmaps to point to your Ruby
+installation.
+
 ## Command-line options
 
 ```
@@ -35,3 +43,14 @@ Usage: genmap [options]
 
 Note, the map extent is either specified via the Sky Atlas 2000 map number or
 by the upper-left and lower-right coordinates.
+
+## Running genmap
+
+Genmap downloads and caches data files in the `data` directory. The
+output of genmap is an SVG file written to stdout.  You should
+redirect this to a file. The easiest way to view a map is to point a
+web browser to it using a local file URL, e.g.,
+`file:///c:/<path>`. The SVG content can be included in a web page
+using the `<IMG>` tag or it can be viewed in an SVG editor, such as
+Inkscape.  Inkscape can also be used to convert the SVG content to PDF
+or various image formats.
