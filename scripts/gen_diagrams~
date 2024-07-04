@@ -1,4 +1,0 @@
-#
-
-../genmap -m 9 -w 6in -S 7 -B -H -C -W > images/map9.svg
-../genmap -m 9 -w 3in -H -p > h400_9.svg
