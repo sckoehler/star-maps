@@ -1,9 +1,0 @@
-#! /usr/bin/perl
-
-mkdir "maps" unless -d "maps";
-
-foreach $i (1..26) {
-  print "$i\n";
-  system "./genmap -m $i -w 6in -S 7 -B -H -C -W > maps/map$i.svg";
-}
-

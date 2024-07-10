@@ -26,13 +26,15 @@ installation.
 
 ```
 Usage: genmap [options]
-    -w, --width SPEC                 Width of image, e.g. 6in
+    -w, --width INCHES               Width of image in inches
+    -d, --dpi PX_PER_IN              Image fineness scale
     -m, --map NUM                    Sky Atlas 2000 map number
     -u, --ul DDDD.D+DDDD             Upper-left map coordinate
     -l, --lr DDDD.D+DDDD             Lower-right map coordinate
     -S, --stars MAG                  Plot stars
     -G, --grid                       Plot grid
     -H, --herschel                   Plot Herschel 400 objects
+    -I, --herschel2                  Plot Herschel II objects
     -p, --plus                       Print dsos as plus signs
     -M, --messier                    Plot Messier objects
     -D, --dso MAG                    Plot deep sky objects
@@ -54,3 +56,8 @@ web browser to it using a local file URL, e.g.,
 using the `<IMG>` tag or it can be viewed in an SVG editor, such as
 Inkscape.  Inkscape can also be used to convert the SVG content to PDF
 or various image formats.
+
+## Pre-built maps
+
+Two PDF maps at the outer level cover the Herschel 400 objects and the
+Hershel II objects.

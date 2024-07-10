@@ -1,4 +1,4 @@
-Page,NGC,Type,1951.0+2304,Mag.,Size,Coord.,Description
+Page,NGC,Type,Const.,Mag.,Size,Coord.,Description
 ,205,G,And,8,17.4,0040.4+4141,M110
 ,404,G,And,10.7,2.1x2.0,0109.4+3543,el circular beautiful brt nucleu
 ,752,OC,And,5.7,50,0157.8+3741,70 stars large scattered outward
@@ -235,10 +235,10 @@ Page,NGC,Type,1951.0+2304,Mag.,Size,Coord.,Description
 1,7331,G,Peg,9.7,10x2,2237.1+3425,sp faint edge on
 ,7448,G,Peg,11.2,2x1,2300.1+1559,sp elongated averted vision
 2,7479,G,Peg,11.6,3.4x2.6,2304.9+1219,Bsp slightly elongated elusive
-3,651,PN,Per,11,157x87,0142.3+5134,M76
+3,651,PN,Per,11,157x87,0142.4+5134,M76
 3,869,OC,Per,4.4,36,0219.0+5709,Double Cluster  resolvable
 3,884,OC,Per,4.7,36,0222.4+5707,Double Cluster  resolvable
-6,1023,G,Per,10.5,4x1.2,0240.3+3904,el elonated brt starlike nucl
+6,1023,G,Per,10.5,4x1.2,0240.4+3904,el elonated brt starlike nucl
 6,1245,OC,Per,6.9,10,0314.7+4715,40 stars large 5 brt stars elus
 7,1342,OC,Per,7.1,15,0331.6+3720,25 stars sl elongated poorish
 8,1444,OC,Per,6.4,4,0349.4+5240,15 stars string of brt stars
@@ -255,7 +255,7 @@ Page,NGC,Type,1951.0+2304,Mag.,Size,Coord.,Description
 ,2479,OC,Pup,9.5,8,0755.1-1743,40 stars faint round small easy
 ,2482,OC,Pup,8.7,18,0754.9-2418,50 stars lg rich no shape
 ,2489,OC,Pup,9.4,7,0756.2-3004,30 stars circular 2 brt st easy
-,2509,OC,Pup,9.3,4,0800.2-1904,40 stars some brt most faint
+,2509,OC,Pup,9.3,4,0800.7-1904,40 stars some brt most faint
 ,2527,OC,Pup,8,22,0805.3-2810,50 stars loose scattered
 ,2539,OC,Pup,8.2,21,0810.7-1250,a brt center blue one  19 Pup
 ,2567,OC,Pup,8.3,10,0818.6-3038,50 stars brt + faint ones
@@ -294,7 +294,7 @@ Page,NGC,Type,1951.0+2304,Mag.,Size,Coord.,Description
 ,6818,PN,Sgr,10,22x15,1944.0-1409,diffuse fuzzy rount some blue
 ,1647,OC,Tau,6,,0446.0+1904,30 stars round double stars
 ,1750,OC,Tau,0,45,0503.9+2339,Part of NGC 1746  3 clusters
-,1817,OC,Tau,7.9,15,0512.2+1642,16 stars loose scattered poor
+,1817,OC,Tau,7.9,15,0512.1+1642,16 stars loose scattered poor
 ,598,G,Tri,5.7,62,0133.9+3039,M33
 ,2681,G,UMa,10.4,2.8x2.5,0853.5+5119,sp circular faint fuzzy
 ,2742,G,UMa,11.2,2.5x1,0907.6+6029,sp elongated elus
@@ -395,7 +395,7 @@ Page,NGC,Type,1951.0+2304,Mag.,Size,Coord.,Description
 ,5846,G,Vir,10.5,.9x.9,1506.4+0136,el small circular fairly bright
 ,6802,OC,Vul,11,3.5,1930.6+2016,faint small opaque disk of stars
 ,6823,OC,Vul,9.8,5,1943.1+2318,30 stars some nebulosity
-,6830,OC,Vul,9,8,1951.0-2304,20 stars brt large easy
+,6830,OC,Vul,9,8,1951.0+2304,20 stars brt large easy
 ,6882,OC,Vul,5.5,,2011.7+2633,20 stars small in a rich field
 ,6885,OC,Vul,9.1,20,2012.0+2629,42 stars large a brt star rich
 ,6940,OC,Vul,6.5,10,2034.6+2818,100 stars very brt rich large

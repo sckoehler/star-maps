@@ -1,0 +1,9 @@
+#! /usr/bin/perl
+
+mkdir "h400_maps" unless -d "h400_maps";
+
+foreach $i (1..26) {
+  print "$i\n";
+  system "./genmap -m $i -w 6 -S 7 -B -H -C -W > h400_maps/map$i.svg";
+}
+

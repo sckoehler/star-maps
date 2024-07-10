@@ -1,0 +1,9 @@
+#! /usr/bin/perl
+
+mkdir "hii_maps" unless -d "hii_maps";
+
+foreach $i (1..26) {
+  print "$i\n";
+  system "./genmap -m $i -w 6 -S 7 -B -I -C -W > hii_maps/map$i.svg";
+}
+
